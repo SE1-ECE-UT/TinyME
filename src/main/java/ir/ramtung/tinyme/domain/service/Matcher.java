@@ -64,11 +64,11 @@ public class Matcher {
 
         if (result.remainder().getQuantity() > 0) {
             if (order.getSide() == Side.BUY) {
-                if (!order.getBroker().hasEnoughCredit((long)order.getPrice() * order.getQuantity())) {
+                if (!order.getBroker().hasEnoughCredit(order.getValue())) {
                     rollbackTrades(order, result.trades());
                     return MatchResult.notEnoughCredit();
                 }
-                order.getBroker().decreaseCreditBy((long)order.getPrice() * order.getQuantity());
+                order.getBroker().decreaseCreditBy(order.getValue());
             }
             order.getSecurity().getOrderBook().enqueue(result.remainder());
         }

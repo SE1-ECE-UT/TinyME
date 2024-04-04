@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static ir.ramtung.tinyme.domain.entity.Side.BUY;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
@@ -36,16 +37,16 @@ public class MatcherTest {
         shareholder.incPosition(security, 100_000);
         orderBook = security.getOrderBook();
         orders = Arrays.asList(
-            new Order(1, security, Side.BUY, 304, 15700, broker, shareholder),
-            new Order(2, security, Side.BUY, 43, 15500, broker, shareholder),
-            new Order(3, security, Side.BUY, 445, 15450, broker, shareholder),
-            new Order(4, security, Side.BUY, 526, 15450, broker, shareholder),
-            new Order(5, security, Side.BUY, 1000, 15400, broker, shareholder),
-            new Order(6, security, Side.SELL, 350, 15800, broker, shareholder),
-            new Order(7, security, Side.SELL, 285, 15810, broker, shareholder),
-            new Order(8, security, Side.SELL, 800, 15810, broker, shareholder),
-            new Order(9, security, Side.SELL, 340, 15820, broker, shareholder),
-            new Order(10, security, Side.SELL, 65, 15820, broker, shareholder)
+                new Order(1, security, BUY, 304, 15700, broker, shareholder),
+                new Order(2, security, BUY, 43, 15500, broker, shareholder),
+                new Order(3, security, BUY, 445, 15450, broker, shareholder),
+                new Order(4, security, BUY, 526, 15450, broker, shareholder),
+                new Order(5, security, BUY, 1000, 15400, broker, shareholder),
+                new Order(6, security, Side.SELL, 350, 15800, broker, shareholder),
+                new Order(7, security, Side.SELL, 285, 15810, broker, shareholder),
+                new Order(8, security, Side.SELL, 800, 15810, broker, shareholder),
+                new Order(9, security, Side.SELL, 340, 15820, broker, shareholder),
+                new Order(10, security, Side.SELL, 65, 15820, broker, shareholder)
         );
         orders.forEach(order -> orderBook.enqueue(order));
     }
@@ -83,7 +84,7 @@ public class MatcherTest {
 
     @Test
     void new_buy_order_matches_partially_with_the_entire_sell_queue() {
-        Order order = new Order(11, security, Side.BUY, 2000, 15820, broker, shareholder);
+        Order order = new Order(11, security, BUY, 2000, 15820, broker, shareholder);
         List<Trade> trades = new ArrayList<>();
         int totalTraded = 0;
         for (Order o : orders.subList(5, 10)) {
@@ -100,7 +101,7 @@ public class MatcherTest {
 
     @Test
     void new_buy_order_does_not_match() {
-        Order order = new Order(11, security, Side.BUY, 2000, 15500, broker, shareholder);
+        Order order = new Order(11, security, BUY, 2000, 15500, broker, shareholder);
         MatchResult result = matcher.match(order);
         assertThat(result.remainder()).isEqualTo(order);
         assertThat(result.trades()).isEmpty();
@@ -112,9 +113,9 @@ public class MatcherTest {
         broker = Broker.builder().build();
         orderBook = security.getOrderBook();
         orders = Arrays.asList(
-                new IcebergOrder(1, security, Side.BUY, 450, 15450, broker, shareholder, 200),
-                new Order(2, security, Side.BUY, 70, 15450, broker, shareholder),
-                new Order(3, security, Side.BUY, 1000, 15400, broker, shareholder)
+                new IcebergOrder(1, security, BUY, 450, 15450, broker, shareholder, 200),
+                new Order(2, security, BUY, 70, 15450, broker, shareholder),
+                new Order(3, security, BUY, 1000, 15400, broker, shareholder)
         );
         orders.forEach(order -> orderBook.enqueue(order));
         Order order = new Order(4, security, Side.SELL, 600, 15450, broker, shareholder);
@@ -129,5 +130,24 @@ public class MatcherTest {
 
         assertThat(result.remainder().getQuantity()).isEqualTo(80);
         assertThat(result.trades()).isEqualTo(trades);
+    }
+
+    @Test
+    void insert_iceberg_and_match_until_quantity_is_less_than_peak_size() {
+        security = Security.builder().isin("TEST").build();
+        shareholder.incPosition(security, 1_000);
+        security.getOrderBook().enqueue(
+                new Order(1, security, Side.SELL, 100, 10, broker, shareholder)
+        );
+
+        Order order = new IcebergOrder(1, security, BUY, 120 , 10, broker, shareholder, 40 );
+        MatchResult result = matcher.execute(order);
+
+        assertThat(result.outcome()).isEqualTo(MatchingOutcome.EXECUTED);
+        assertThat(result.trades()).hasSize(1);
+        assertThat(security.getOrderBook().getSellQueue()).hasSize(0);
+        assertThat(security.getOrderBook().getBuyQueue()).hasSize(1);
+        assertThat(security.getOrderBook().getBuyQueue().get(0).getQuantity()).isEqualTo(20);
+
     }
 }
